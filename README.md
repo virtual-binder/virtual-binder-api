@@ -1,4 +1,4 @@
-# Pokémon Card Scanner
+# Virtual Binder
 
 Proyecto para detectar cartas Pokémon en una foto, enderezar sus recortes, leer el nombre y número mediante OCR, y consultar su ficha y precios. Incluye una API, una herramienta de línea de comandos y una app móvil.
 
@@ -26,8 +26,8 @@ Comprueba el servicio en `http://localhost:8000/salud` y abre su documentación 
 También puedes usar Docker:
 
 ```bash
-docker build -t pokemon-card-scanner-api backend
-docker run --rm -p 8000:8000 pokemon-card-scanner-api
+docker build -t virtual-binder-api backend
+docker run --rm -p 8000:8000 virtual-binder-api
 ```
 
 ### Identificar cartas
