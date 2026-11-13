@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Entornos locales
+.env
+.env.*
+!.env.example
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+
+# Salidas del procesamiento
+cartas_recortadas/
+
+# Sistema y editores
+.DS_Store
+.vscode/
+.idea/
