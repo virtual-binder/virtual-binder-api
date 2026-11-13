@@ -1,16 +1,15 @@
-# Virtual Binder
+# Virtual Binder API
 
-Proyecto para detectar cartas Pokémon en una foto, enderezar sus recortes, leer el nombre y número mediante OCR, y consultar su ficha y precios. Incluye una API, una herramienta de línea de comandos y una app móvil.
+Backend de Virtual Binder. Actualmente detecta cartas Pokémon en una foto, endereza sus recortes, lee el nombre y número mediante OCR y consulta su ficha y precios.
 
 ## Estructura
 
 - `backend/`: API FastAPI con detección OpenCV, OCR con Tesseract y consulta a TCGdex y Pokémon TCG.
 - `cli/`: recortador local de cartas sin OCR ni consulta de precios.
-- `mobile/`: app Android/iOS creada con Expo y React Native.
 - `assets/samples/`: fotografías de prueba originales.
 - `assets/debug/`: imágenes generadas durante el desarrollo del detector.
 
-## API
+## Ejecutar la API
 
 Requisitos: Python 3.12 o superior y Tesseract OCR.
 
@@ -30,7 +29,7 @@ docker build -t virtual-binder-api backend
 docker run --rm -p 8000:8000 virtual-binder-api
 ```
 
-### Identificar cartas
+## Identificar cartas
 
 `POST /identificar` recibe un formulario multipart con el campo `archivo` (JPEG, PNG o WebP, máximo 20 MB).
 
@@ -45,26 +44,9 @@ Los precios proceden de TCGplayer en USD y Cardmarket en EUR. Las fuentes extern
 
 ## Recortador CLI
 
-Con el mismo entorno virtual activado:
-
 ```bash
 python cli/recortar_cartas.py assets/samples/IMG_20261112_220900586.jpg \
   --salida cartas_recortadas --debug
 ```
 
 Los archivos generados se guardan en `cartas_recortadas/`, carpeta excluida de Git.
-
-## App móvil
-
-Requisitos: una versión LTS de Node.js compatible con la versión de Expo del proyecto.
-
-```bash
-cd mobile
-cp .env.example .env
-npm install
-npm start
-```
-
-Edita `mobile/.env` y configura `EXPO_PUBLIC_API_URL` con la URL de la API. Para probar en un teléfono conectado a la misma red, usa la IP local del equipo, por ejemplo `http://192.168.1.50:8000`; `localhost` dentro del teléfono apunta al propio teléfono.
-
-Desde Expo CLI puedes abrir Android con `npm run android`, iOS con `npm run ios` o la versión web con `npm run web`.

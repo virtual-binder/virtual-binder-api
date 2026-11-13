@@ -9,13 +9,6 @@ venv/
 .env.*
 !.env.example
 
-# Node / Expo
-node_modules/
-.expo/
-dist/
-web-build/
-*.log
-
 # Salidas del procesamiento
 cartas_recortadas/
 
@@ -23,3 +16,4 @@ cartas_recortadas/
 .DS_Store
 .vscode/
 .idea/
+*.log
