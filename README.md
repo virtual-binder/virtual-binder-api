@@ -22,6 +22,8 @@ uvicorn api:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
 
 Comprueba el servicio en `http://localhost:8000/health` y abre su documentación en `http://localhost:8000/docs`.
 
+CORS permite por defecto `http://localhost:3000` y `http://localhost:8081`. Configura `CORS_ORIGINS` con una lista separada por comas para otros entornos. Desde `virtual-binder-infra`, `make up` levanta esta API y PostgreSQL mediante Docker Compose.
+
 También puedes usar Docker:
 
 ```bash

@@ -12,7 +12,10 @@ Endpoint principal:
 Documentación interactiva automática en:  http://localhost:8000/docs
 """
 
+import os
+
 from fastapi import FastAPI, File, Query, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from nucleo_cartas import procesar_foto
@@ -23,6 +26,17 @@ app = FastAPI(
                  "número por OCR y devuelve la ficha y el precio de mercado "
                  "(TCGplayer en USD y Cardmarket en EUR)."),
     version="1.0.0",
+)
+
+cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://localhost:8081",
+).split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in cors_origins if origin.strip()],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 TIPOS_PERMITIDOS = {"image/jpeg", "image/png", "image/webp"}
