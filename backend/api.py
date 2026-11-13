@@ -29,8 +29,8 @@ TIPOS_PERMITIDOS = {"image/jpeg", "image/png", "image/webp"}
 TAMANO_MAX = 20 * 1024 * 1024   # 20 MB
 
 
-@app.get("/salud")
-def salud():
+@app.get("/health")
+def health():
     return {"estado": "ok"}
 
 

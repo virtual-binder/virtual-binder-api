@@ -20,7 +20,7 @@ pip install -r backend/requirements.txt
 uvicorn api:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
 ```
 
-Comprueba el servicio en `http://localhost:8000/salud` y abre su documentación en `http://localhost:8000/docs`.
+Comprueba el servicio en `http://localhost:8000/health` y abre su documentación en `http://localhost:8000/docs`.
 
 También puedes usar Docker:
 
