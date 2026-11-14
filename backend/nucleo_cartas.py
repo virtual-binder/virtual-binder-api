@@ -22,6 +22,7 @@ import pytesseract
 PROPORCION_CARTA = 63 / 88                     # ancho / alto de una carta real
 PROPORCION_MIN, PROPORCION_MAX = 0.45, 0.90    # rango admisible (perspectiva)
 AREA_MINIMA_FRAC = 0.02
+AREA_MAXIMA_FRAC = 0.20
 MARGEN_BORDE_FRAC = 0.02
 
 TCGDEX = "https://api.tcgdex.net/v2/en"
@@ -31,22 +32,26 @@ HTTP_TIMEOUT = 20
 _cache_detalle = {}   # caché en memoria: id de carta -> detalle con precios
 
 
-# ---------- Detección y recorte (igual que en el recortador CLI) ----------
+# ---------- Detección y recorte ----------
 
 def ordenar_puntos(pts):
     """Ordena 4 puntos como: sup-izq, sup-der, inf-der, inf-izq."""
     pts = pts.reshape(4, 2).astype("float32")
-    s = pts.sum(axis=1)
-    d = np.diff(pts, axis=1).ravel()
-    return np.array([
-        pts[np.argmin(s)], pts[np.argmin(d)],
-        pts[np.argmax(s)], pts[np.argmax(d)],
-    ], dtype="float32")
+    centro = pts.mean(axis=0)
+    angulos = np.arctan2(pts[:, 1] - centro[1], pts[:, 0] - centro[0])
+    ordenados = pts[np.argsort(angulos)]
+    inicio = int(np.argmin(ordenados.sum(axis=1)))
+    return np.roll(ordenados, -inicio, axis=0).astype("float32")
 
 
 def enderezar(imagen, pts, ancho_salida):
-    """Transformación de perspectiva: deja la carta de frente."""
+    """Transformación de perspectiva: deja la carta de frente y vertical."""
     rect = ordenar_puntos(pts)
+    tl, tr, br, bl = rect
+    ancho_origen = max(np.linalg.norm(tr - tl), np.linalg.norm(br - bl))
+    alto_origen = max(np.linalg.norm(bl - tl), np.linalg.norm(br - tr))
+    if ancho_origen > alto_origen:
+        rect = np.roll(rect, -1, axis=0)
     alto_salida = int(round(ancho_salida / PROPORCION_CARTA))
     destino = np.array([
         [0, 0], [ancho_salida - 1, 0],
@@ -59,10 +64,13 @@ def enderezar(imagen, pts, ancho_salida):
 def es_proporcion_valida(quad):
     rect = ordenar_puntos(quad)
     (tl, tr, br, bl) = rect
-    ancho = max(np.linalg.norm(tr - tl), np.linalg.norm(br - bl))
-    alto = max(np.linalg.norm(bl - tl), np.linalg.norm(br - tr))
-    if min(ancho, alto) <= 0:
+    anchos = [np.linalg.norm(tr - tl), np.linalg.norm(br - bl)]
+    altos = [np.linalg.norm(bl - tl), np.linalg.norm(br - tr)]
+    if min(anchos + altos) <= 0:
         return False
+    if min(anchos) / max(anchos) < 0.55 or min(altos) / max(altos) < 0.55:
+        return False
+    ancho, alto = max(anchos), max(altos)
     return PROPORCION_MIN <= min(ancho, alto) / max(ancho, alto) <= PROPORCION_MAX
 
 
@@ -76,36 +84,122 @@ def es_borde_de_foto(quad, forma_imagen):
     return True
 
 
-def detectar_cartas(imagen):
-    """Devuelve la lista de cuadriláteros (4x2) que parecen cartas."""
-    area_min = AREA_MINIMA_FRAC * imagen.shape[0] * imagen.shape[1]
-    gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-    gris = cv2.GaussianBlur(gris, (5, 5), 0)
-
-    binaria = cv2.adaptiveThreshold(
-        gris, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 25, 10)
-    binaria = cv2.morphologyEx(binaria, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
-    bordes = cv2.Canny(gris, 30, 90)
-    bordes = cv2.dilate(bordes, np.ones((3, 3), np.uint8), iterations=2)
+def _cuadrilateros_de_mascara(mascara, imagen, flexible=False):
+    area_imagen = imagen.shape[0] * imagen.shape[1]
+    area_min = (0.012 if flexible else AREA_MINIMA_FRAC) * area_imagen
+    area_max = AREA_MAXIMA_FRAC * area_imagen
+    contornos, _ = cv2.findContours(
+        mascara, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
     quads = []
-    for mascara in (binaria, bordes):
-        contornos, _ = cv2.findContours(
-            mascara, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for c in contornos:
-            if cv2.contourArea(c) < area_min:
+    for contorno in contornos:
+        if flexible:
+            contorno = cv2.convexHull(contorno)
+        area = cv2.contourArea(contorno)
+        if not area_min <= area <= area_max:
+            continue
+        tolerancias = (0.015, 0.02, 0.025, 0.03, 0.04) if flexible else (0.02,)
+        for tolerancia in tolerancias:
+            aprox = cv2.approxPolyDP(
+                contorno, tolerancia * cv2.arcLength(contorno, True), True)
+            if len(aprox) != 4 or not cv2.isContourConvex(aprox):
                 continue
-            aprox = cv2.approxPolyDP(c, 0.02 * cv2.arcLength(c, True), True)
-            if len(aprox) == 4 and cv2.isContourConvex(aprox):
-                q = ordenar_puntos(aprox)
-                if es_proporcion_valida(q) and not es_borde_de_foto(q, imagen.shape):
-                    quads.append(q)
+            quad = ordenar_puntos(aprox)
+            if es_proporcion_valida(quad) and not es_borde_de_foto(quad, imagen.shape):
+                quads.append(quad)
+                break
+        else:
+            if flexible:
+                quad = ordenar_puntos(cv2.boxPoints(cv2.minAreaRect(contorno)))
+                if es_proporcion_valida(quad) and not es_borde_de_foto(quad, imagen.shape):
+                    quads.append(quad)
+    return quads
+
+
+def _iou_cuadrilateros(a, b):
+    area_a = abs(cv2.contourArea(a))
+    area_b = abs(cv2.contourArea(b))
+    interseccion, _ = cv2.intersectConvexConvex(a, b)
+    union = area_a + area_b - interseccion
+    return interseccion / union if union > 0 else 0.0
+
+
+def _cobertura_cuadrilateros(a, b):
+    area_min = min(abs(cv2.contourArea(a)), abs(cv2.contourArea(b)))
+    if area_min <= 0:
+        return 0.0
+    interseccion, _ = cv2.intersectConvexConvex(a, b)
+    return interseccion / area_min
+
+
+def _son_duplicados(a, b):
+    if _cobertura_cuadrilateros(a, b) > 0.7:
+        return True
+    centro_a = tuple(a.mean(axis=0).astype(float))
+    centro_b = tuple(b.mean(axis=0).astype(float))
+    return (cv2.pointPolygonTest(a, centro_b, False) >= 0
+            or cv2.pointPolygonTest(b, centro_a, False) >= 0)
+
+
+def _mascara_color(imagen):
+    hsv = cv2.cvtColor(imagen, cv2.COLOR_BGR2HSV)
+    mascara = cv2.inRange(hsv, (0, 45, 60), (179, 255, 255))
+    lado = max(3, int(round(min(imagen.shape[:2]) * 0.01)) | 1)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (lado, lado))
+    mascara = cv2.morphologyEx(mascara, cv2.MORPH_CLOSE, kernel)
+    return cv2.morphologyEx(mascara, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+
+
+def detectar_cartas(imagen):
+    """Devuelve la lista de cuadriláteros (4x2) que parecen cartas."""
+    gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+    gris = cv2.GaussianBlur(gris, (5, 5), 0)
+    mascaras = []
+    for umbral_bajo, umbral_alto in ((30, 90), (50, 150)):
+        bordes = cv2.Canny(gris, umbral_bajo, umbral_alto)
+        mascaras.append(cv2.dilate(
+            bordes, np.ones((3, 3), np.uint8), iterations=1))
+    mascaras.append(_mascara_color(imagen))
 
     unicas = []
-    for q in quads:
-        centro = q.mean(axis=0)
-        if not any(np.linalg.norm(centro - u.mean(axis=0)) < 20 for u in unicas):
-            unicas.append(q)
+    for mascara in mascaras:
+        for quad in _cuadrilateros_de_mascara(mascara, imagen):
+            if not any(_iou_cuadrilateros(quad, otra) > 0.5 for otra in unicas):
+                unicas.append(quad)
+    if not unicas:
+        return []
+
+    area_referencia = float(np.median([
+        abs(cv2.contourArea(quad)) for quad in unicas
+    ]))
+    bordes_suaves = cv2.Canny(gris, 15, 45)
+    mascaras_recuperacion = [
+        cv2.dilate(bordes_suaves, np.ones((3, 3), np.uint8), iterations=1),
+        cv2.morphologyEx(
+            bordes_suaves, cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))),
+    ]
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gris)
+    for umbral_bajo, umbral_alto in ((15, 45), (20, 60)):
+        bordes = cv2.Canny(clahe, umbral_bajo, umbral_alto)
+        mascaras_recuperacion.append(cv2.morphologyEx(
+            bordes, cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))))
+
+    candidatas = []
+    for mascara in mascaras + mascaras_recuperacion:
+        candidatas.extend(_cuadrilateros_de_mascara(
+            mascara, imagen, flexible=True))
+    candidatas = [
+        quad for quad in candidatas
+        if 0.6 * area_referencia <= abs(cv2.contourArea(quad)) <= 1.8 * area_referencia
+        and not any(_son_duplicados(quad, otra) for otra in unicas)
+    ]
+    candidatas.sort(key=lambda quad: abs(np.log(
+        abs(cv2.contourArea(quad)) / area_referencia)))
+    for quad in candidatas:
+        if not any(_son_duplicados(quad, otra) for otra in unicas):
+            unicas.append(quad)
     return unicas
 
 
@@ -141,7 +235,10 @@ def _ocr_linea(imagen, whitelist=None):
     config = "--psm 7"   # tratar la imagen como una sola línea de texto
     if whitelist:
         config += f" -c tessedit_char_whitelist={whitelist}"
-    return pytesseract.image_to_string(imagen, config=config).strip()
+    try:
+        return pytesseract.image_to_string(imagen, config=config).strip()
+    except pytesseract.TesseractError:
+        return ""
 
 
 def leer_nombre(carta):

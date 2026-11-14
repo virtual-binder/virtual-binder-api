@@ -31,6 +31,12 @@ docker build -t virtual-binder-api backend
 docker run --rm -p 8000:8000 virtual-binder-api
 ```
 
+## Publicación
+
+`.github/workflows/publish-api.yml` construye el contenedor, comprueba `/health`, procesa una foto real y publica la imagen en Artifact Registry. Después solicita el despliegue protegido en `virtual-binder-infra`.
+
+Configura las variables `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_API_SERVICE_ACCOUNT` y `GCP_WORKLOAD_IDENTITY_PROVIDER`. Para la llamada entre repositorios, agrega los secretos `INFRA_DISPATCH_APP_ID` y `INFRA_DISPATCH_PRIVATE_KEY` de una GitHub App con acceso limitado a `virtual-binder-infra` y permiso `Contents: write`.
+
 ## Identificar cartas
 
 `POST /identificar` recibe un formulario multipart con el campo `archivo` (JPEG, PNG o WebP, máximo 20 MB).

@@ -1,0 +1,91 @@
+name: Publish API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - assets/samples/**
+      - .github/workflows/publish-api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: api-image-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_API_SERVICE_ACCOUNT: ${{ vars.GCP_API_SERVICE_ACCOUNT }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate CI configuration
+        run: |
+          test -n "$GCP_PROJECT_ID"
+          test -n "$GCP_API_SERVICE_ACCOUNT"
+          test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER"
+          echo "IMAGE_REPOSITORY=${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/virtual-binder/api" >> "$GITHUB_ENV"
+
+      - name: Build image
+        run: docker build --tag "$IMAGE_REPOSITORY:$GITHUB_SHA" ./backend
+
+      - name: Smoke test image
+        run: |
+          docker run --detach --name api-smoke --publish 8000:8000 "$IMAGE_REPOSITORY:$GITHUB_SHA"
+          trap 'docker logs api-smoke; docker rm --force api-smoke' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8000/health; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent --show-error \
+            --request POST \
+            --form "archivo=@assets/samples/IMG_20261112_220900586.jpg;type=image/jpeg" \
+            "http://localhost:8000/identificar?incluir_recortes=false" \
+            --output smoke.json
+          python3 -c 'import json; data = json.load(open("smoke.json")); assert data["total"] == 9, data["total"]'
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_API_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Publish image
+        id: publish
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker push "$IMAGE_REPOSITORY:$GITHUB_SHA"
+          image=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_REPOSITORY:$GITHUB_SHA")
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Create infrastructure dispatch token
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.INFRA_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.INFRA_DISPATCH_PRIVATE_KEY }}
+          owner: virtual-binder
+          repositories: virtual-binder-infra
+
+      - name: Request protected deployment
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          API_IMAGE: ${{ steps.publish.outputs.image }}
+        run: |
+          gh api --method POST repos/virtual-binder/virtual-binder-infra/dispatches \
+            --field event_type=api-image-built \
+            --field "client_payload[image]=${API_IMAGE}"
