@@ -33,13 +33,13 @@ docker run --rm -p 8000:8000 virtual-binder-api
 
 ## Publicación
 
-`.github/workflows/publish-api.yml` construye el contenedor, comprueba `/health`, procesa una foto real y publica la imagen en Amazon ECR. Después solicita el despliegue en App Runner desde `virtual-binder-infra`.
+`.github/workflows/publish-api.yml` construye el contenedor, comprueba `/health`, procesa una foto real y publica la imagen en Amazon ECR. Después solicita el despliegue en AWS Lambda con Function URL desde `virtual-binder-infra`.
 
-Configura las variables `AWS_ACCOUNT_ID`, `AWS_REGION` y `AWS_API_ROLE_ARN`. Para la llamada entre repositorios, agrega los secretos `INFRA_DISPATCH_APP_ID` y `INFRA_DISPATCH_PRIVATE_KEY` de una GitHub App con acceso limitado a `virtual-binder-infra` y permiso `Contents: write`.
+Configura las variables `AWS_ACCOUNT_ID`, `AWS_REGION` y `AWS_API_ROLE_ARN`. Mientras la política del proyecto AWS bloquee OIDC, el workflow se ejecuta manualmente y el primer despliegue se realiza con AWS CLI. Para la llamada entre repositorios, agrega los secretos `INFRA_DISPATCH_APP_ID` y `INFRA_DISPATCH_PRIVATE_KEY` de una GitHub App con acceso limitado a `virtual-binder-infra` y permiso `Contents: write`.
 
 ## Identificar cartas
 
-`POST /identificar` recibe un formulario multipart con el campo `archivo` (JPEG, PNG o WebP, máximo 20 MB).
+`POST /identificar` recibe un formulario multipart con el campo `archivo` (JPEG, PNG o WebP, máximo 4,4 MB).
 
 ```bash
 curl -X POST "http://localhost:8000/identificar?incluir_recortes=false" \

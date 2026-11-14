@@ -1,7 +1,13 @@
 # API de identificación de cartas Pokémon
 # Construcción:  docker build -t pokemon-api .
 # Ejecución:     docker run -p 8000:8000 pokemon-api
+FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0 AS lambda_adapter
 FROM python:3.12-slim
+
+COPY --from=lambda_adapter /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_READINESS_CHECK_PATH=/health
+ENV AWS_LWA_READINESS_CHECK_PORT=8000
+ENV PORT=8000
 
 # Dependencias de sistema:
 #   tesseract-ocr -> motor OCR (pytesseract es solo el wrapper)

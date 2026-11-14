@@ -1,12 +1,6 @@
 name: Publish API
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - backend/**
-      - assets/samples/**
-      - .github/workflows/publish-api.yml
   workflow_dispatch:
 
 permissions:
@@ -22,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       AWS_API_ROLE_ARN: ${{ vars.AWS_API_ROLE_ARN }}
     steps:

@@ -40,7 +40,7 @@ app.add_middleware(
 )
 
 TIPOS_PERMITIDOS = {"image/jpeg", "image/png", "image/webp"}
-TAMANO_MAX = 20 * 1024 * 1024   # 20 MB
+TAMANO_MAX = 4_400_000   # 4,4 MB; margen para el límite de 6 MB de Lambda Function URL
 
 
 @app.get("/health")
@@ -62,7 +62,7 @@ async def identificar(
 
     datos = await archivo.read()
     if len(datos) > TAMANO_MAX:
-        raise HTTPException(413, "La imagen supera el máximo de 20 MB.")
+        raise HTTPException(413, "La imagen supera el máximo de 4,4 MB.")
 
     try:
         resultado = procesar_foto(datos, ancho_carta=ancho_carta,
