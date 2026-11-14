@@ -9,6 +9,9 @@ venv/
 .env.*
 !.env.example
 
+# Herramientas Node
+node_modules/
+
 # Salidas del procesamiento
 cartas_recortadas/
 

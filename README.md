@@ -58,3 +58,18 @@ python cli/recortar_cartas.py assets/samples/IMG_20261112_220900586.jpg \
 ```
 
 Los archivos generados se guardan en `cartas_recortadas/`, carpeta excluida de Git.
+
+## Base de datos y catálogo
+
+Supabase almacena perfiles y cartas del catálogo. Las migraciones están en `supabase/migrations/` y habilitan RLS: lectura pública de perfiles y cartas disponibles, y administración mediante el dueño autenticado.
+
+Supabase CLI es una dependencia de desarrollo del proyecto:
+
+```bash
+npm install
+./node_modules/.bin/supabase login
+./node_modules/.bin/supabase link --project-ref TU_PROJECT_REF
+./node_modules/.bin/supabase db push --remote --yes
+```
+
+La aplicación de las dos primeras migraciones crea el esquema y el catálogo demostrativo de Erwin. La clave `anon` es pública y solo permite lo autorizado por RLS; nunca uses claves `service_role` en la web.

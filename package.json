@@ -1,0 +1,10 @@
+{
+  "name": "virtual-binder-api-tools",
+  "private": true,
+  "scripts": {
+    "supabase": "supabase"
+  },
+  "devDependencies": {
+    "supabase": "^3.1.0"
+  }
+}
