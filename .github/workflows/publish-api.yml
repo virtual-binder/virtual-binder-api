@@ -22,19 +22,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      REGION: ${{ vars.GCP_REGION || 'us-central1' }}
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_API_SERVICE_ACCOUNT: ${{ vars.GCP_API_SERVICE_ACCOUNT }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      AWS_API_ROLE_ARN: ${{ vars.AWS_API_ROLE_ARN }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Validate CI configuration
         run: |
-          test -n "$GCP_PROJECT_ID"
-          test -n "$GCP_API_SERVICE_ACCOUNT"
-          test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER"
-          echo "IMAGE_REPOSITORY=${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/virtual-binder/api" >> "$GITHUB_ENV"
+          test -n "$AWS_ACCOUNT_ID"
+          test -n "$AWS_API_ROLE_ARN"
+          echo "IMAGE_REPOSITORY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/virtual-binder" >> "$GITHUB_ENV"
 
       - name: Build image
         run: docker build --tag "$IMAGE_REPOSITORY:$GITHUB_SHA" ./backend
@@ -56,18 +54,18 @@ jobs:
             --output smoke.json
           python3 -c 'import json; data = json.load(open("smoke.json")); assert data["total"] == 9, data["total"]'
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_API_SERVICE_ACCOUNT }}
+          role-to-assume: ${{ vars.AWS_API_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
 
       - name: Publish image
         id: publish
         run: |
-          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
           docker push "$IMAGE_REPOSITORY:$GITHUB_SHA"
           image=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_REPOSITORY:$GITHUB_SHA")
           echo "image=$image" >> "$GITHUB_OUTPUT"
